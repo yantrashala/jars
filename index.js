@@ -1,43 +1,89 @@
 #!/usr/bin/env node
-var prompt = require('prompt');
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+var inquirer = require("inquirer");
 var colors = require("colors");
-var http = require('http');
+var http = require('https');
 var fs = require('fs');
-var jars = {};
 var path=require('path');
-var parse = require('url-parse')
+var parse = require('url-parse');
+var program = require("commander");
+var printMessage = require('print-message');
+//var cmd=require('node-cmd');
+var jars = {};
 
-var schema = {
-  properties :
-  {
-    url: {
-      description: colors.cyan('Provide Artifactory server url'),
-      pattern: /(https?:\/\/[^\s\.]+\.[^\s]{2,}|www\.[^\s]+\.[^\s]{2,})/,
-      required: true
+program
+  .version('1.0.0')
+  .option('-U, --url <path>', 'Artifactory URL')
+  .option('-r, --repo <path>', 'Artifactory NPM repository name')
+  .option('-s, --scope <path>', 'Artifactory scope')
+  .option('-u, --username <path>', 'Artifactory Username to authenticate.')
+  .option('-p, --password <path>', 'Artifactory Password to authenticate.')
+  .parse(process.argv);
+
+var schema = [
+    {
+      name: "url",
+      type: "input",
+      message: colors.cyan("Artifactory URL : "),
+      required: true,
+      when: !program.url
     },
-    username: {
-      description: colors.cyan('Provide your Artifactory Username'),
-      required: true
+    {
+      name: "repo",
+      type: "input",
+      message: colors.cyan("Artifactory repository : "),
+      required: true,
+      when: !program.repo
     },
-    password: {
-      description: colors.cyan('Provide your Artifactory Password'),
+    {
+      name: "scope",
+      type: "input",
+      message: colors.cyan("Npm Scope : "),
+      required: true,
+      when: !program.scope
+    },
+    {
+      name: "username",
+      type: "input",
+      message: colors.cyan("Artifactory Username : "),
+      required: true,
+      when: !program.username
+    },
+    {
+      name: "password",
+      type: "password",
+      message: colors.cyan("Artifactory Password : "),
       hidden: true,
-      replace: '*',
-      required: true
+      replace: "*",
+      required: true,
+      when: !program.password
     }
-  }
-};
+];
+
+printMessage([
+    "",
+    "Press ^C at any time to quit.",
+    ""
+]);
 
 jars.setup = function(cb) {
-  prompt.start();
-  prompt.get(schema, function (err, data) {
-    if (err) { cb(err, null); }
+  inquirer.prompt(schema).then(function (data) {
+    if(program.url)
+      data.url = program.url;
+    if(program.repo)
+      data.repo = program.repo;
+    if(program.scope)
+      data.scope = program.scope;
+    if(program.username)
+      data.username = program.username;
+    if(program.password)
+      data.password = program.password;
 
     var options = {};
     url = parse(data.url, true);
     options.hostname = url.hostname;
     options.port = url.port;
-    options.path = url.pathname;
+    options.path = url.pathname+"/api/npm/"+data.repo+"/auth/"+data.scope;
     options.auth = data.username+":"+data.password;
     jars.httpRequestCall(options, cb);
   });
@@ -56,11 +102,12 @@ jars.httpRequestCall = function(options, cb){
         if(jsonString && jsonString.errors){
           cb(jsonString.errors[0].message, null);
         } else {
+          //console.log('---------chunk--', chunk);
           fs.appendFile(path.join(homePath,'.npmrc'), chunk, function (err) {
              if (err) throw err;
              else {
-               console.log('Artifactory setup done successfully!!!');
-               cb(null,'DONE');
+               console.log("");
+               cb(null,"NPM scope successfully added!!!");
              }
           });
         }
@@ -71,7 +118,6 @@ jars.httpRequestCall = function(options, cb){
 jars.setup(function(err, data) {
   if (err) console.log(err);
   else console.log(data);
-  prompt.stop();
 });
 
 module.exports = jars;
